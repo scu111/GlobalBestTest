@@ -10,4 +10,6 @@ discovered that this was not possible in any open source software - only availab
 
 The functions, global.best and global.BVStep, described in this repository perform the underlying procedure (BIOENV or BVStep, using Vegan or Sinkr codes), perform the “global BEST” significance tests, and plot histograms of permuted coefficients showing the actual coefficient and permutation p-value. They were validated using the Clyde Macrofauna biomass and environmental datasets available in PRIMER, generating the same results as in the published studies (Clarke et al., 2008, 2014). The computation is, however, CPU intensive and might take a bit of time to complete.
 
+Please feel free to contact me (solomonudochi@gmail.com) for improvements to the codes. You also can site my PhD thesis (https://ueaeprints.uea.ac.uk/id/eprint/82744/1/2021UdochiSPhD.pdf) if you find them useful - links to Microsoft notebooks containing the codes (Accompanying Material section) as well as an example of their usage (Chapter 4) are provided in the the thesis.
+
 Enjoy!
