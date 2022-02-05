@@ -1,0 +1,330 @@
+#WRITTEN BY SOLOMON UDOCHI
+
+#This function uses vegan, MASS, ggplot2, svglite, grid, and ggthemes to:
+#(i) perform the bioenv procedure and provide outputs,
+#(ii) create n specified permutations of an environmental matrix and plot Bray-Curtin and Chi-sq trends.
+##The trend plots are displayed and then saved in your working directory
+#as high-resolution .svg and .tiff extensions.
+#(iii) perform the globalBEST significance test (Clarke et al., 2008) using
+#both the actual bioenv and permuted data
+#(iv) plot the globalBEST results as a histogram of permuted correlation coefficients
+#which shows the actual coefficient and p-value.
+#The histogram is also displayed and then saved in your working directory
+#as high-resolution .svg and .tiff extensions.
+
+#Output of the function is a list with 6 items:
+#     $BIOENV_results          = BIOENV results. See bioenv output in the vegan package. Use summary() to view.
+#     $permuted_best_corr      = variable containing n specified best correlations 
+#                               from the bioenv analysis on permuted data. Can be saved as .csv
+#     $permutation_trends     = List of 2 containing: $chisq = chisq trend values
+#                                                     $bray = Bray-Curtis trend values
+#     $t                       = number of times where permuted BEST corr is >= actual BEST corr
+#     $p                       = upper limit of p-value of the global best test
+#     $global.best.plot       = plot of global best test with p-value upper limit
+
+#Note that BIOENV is CPU-demanding and may take several minutes to complete
+
+
+
+#   Example implementation
+#   gBEST <- global.best(
+#                       env.var = Env.data,
+#                       bio.var = community.data,
+#                       nperm = 999,
+#                       bio.dist.method = "bray"
+#                       )
+
+
+#   summary(gBEST$BIOENV_results)   #to view BIOENV results
+
+#   length(gBEST$permuted_best_corr)   #to confirm number permuted best correlations
+
+#   gBEST$permutation_trends$bray     #to view Bray-Curtis permuted trend data
+
+#   gBEST$permutation_trends$chisq      #to view chisq permuted trend data
+
+#    gBEST$t  #to view t, where t of T permutations have best corrs >= actual best corr
+
+#    gBEST$p    #to view upper limit of p-value
+
+#   gBEST$$global.best.plot     #to view global BEST plot
+
+
+
+
+global.best <- function(
+  env.var
+  #Dataframe containing environmental data
+  #arranged with rows representing samples
+  #and columns representing variables.
+  #Only include variable and not site names.
+  #For permutation, negative numbers are converted
+  #into absolute values
+  , 
+  
+  bio.var
+  #Dataframe containing standardised and
+  #transformed biological (i.e. community) data. 
+  #This could be abundance, density, etc.
+  #Rows to represent samples and
+  #columns to represent species.
+  #Use species names (without space) as
+  #column (i.e. variable) names.
+  , 
+  bio.dist.method = "bray" 
+  #Dissimilarity index, partial match to "manhattan", "euclidean", "canberra",
+  #"clark", "bray", "kulczynski", "jaccard", "gower", "altGower", "morisita",
+  #"horn", "mountford", "raup", "binomial", "chao", "cao", "mahalanobis",
+  #"chisq" or "chord". All are provided in the R package "vegan".
+  ,
+  nperm = 999
+  #Number of permutations.
+  #Use 999 for p < 0.001.
+){
+  require(vegan)
+  require(ggplot2)
+  require(svglite)
+  require(MASS)
+  require(grid)
+  require(ggthemes)
+
+
+  
+  
+  #calculating dissimilarity distance for community data
+  nem.dis <- vegdist(bio.var, method = bio.dist.method)
+  
+  
+  env.var <- env.var
+  
+  len <- length(names(env.var)) #number of variables selected
+  
+  env.var.mat <- as.matrix(abs(env.var)) #negative numbers converted into positive for permutation
+  
+  #Bioenv analysis
+  bioenv.res <- bioenv(nem.dis, env.var, index = bio.dist.method) 
+  
+  
+  
+  #function to extract best corr from bioenv analysis
+  
+  corrs <- c() #variable to save all corrs from the bioenv
+  for (i in 1:len){
+    corrs[i] <- bioenv.res$models[[i]]$est
+  }
+  best.corr.actual <- round(max(corrs), digits = 2) #best corr from bioenv
+ 
+  #
+  #
+  #
+  #
+  #global best permutation test for env mat
+  
+  #
+  #
+  nperm <- nperm
+  #
+  #permuting matrices
+  env.var.list <- permatfull(env.var.mat,
+                                 fixedmar = "columns",
+                                 mtype = "count",
+                                 times = nperm,
+                                 strata = NULL,
+                                 shuffle = "samp")
+  
+  #trend plots for permuted data
+  perm.plot.trend.bray <- plot(env.var.list, type = "bray") #Bray Curtis dissimilarities
+  perm.plot.trend.chisq <- plot(env.var.list, type = "chisq") #Chi-square values
+  permutation_trends <- list(bray = perm.plot.trend.bray, chisq = perm.plot.trend.chisq)
+  
+  #Save plots as .svg 
+  
+  svg(filename="Trend plot Bray.svg", 
+      width=9.7, 
+      height=7.43, 
+      pointsize = 12)
+  plot(env.var.list, type = "bray")
+  dev.off()
+  
+  
+  svg(filename="Trend plot Chi-sq.svg", 
+      width=9.7, 
+      height=7.43, 
+      pointsize = 12)
+  plot(env.var.list, type = "chisq")
+  dev.off()
+  
+  #Save plots as .tiff
+  tiff("Trend plot Bray.tiff",
+       width = 130, height = 100, 
+       units = "mm", res=300)
+  plot(env.var.list, type = "bray")
+  dev.off()
+  
+  
+  
+  tiff("Trend plot Chi-sq.tiff",
+       width = 130, height = 100, 
+       units = "mm", res=300)
+  plot(env.var.list, type = "chisq")
+  dev.off()
+  
+  
+  env.var.list2 <- list()   #list to contain permuted dataframes
+  
+  #function to convert permuted matrices to list and put them in a dataframe
+  for (i in 1:nperm){
+    
+    sub <- as.data.frame(env.var.list$perm[[i]])
+    env.var.list2[[i]] <- sub
+  }
+  
+  
+  #function to loop bioenv analysis and extract best correlation
+  
+  best.corr <- c() #variable to save best correlation of permuted bioenv analyses
+  
+  for (i in 1:nperm){
+    corrs <- c()
+    env.var <- env.var.list2[[i]]
+    bioenv.corr <- bioenv(nem.dis, env.var, index = bio.dist.method)
+    for (j in 1:len){
+      corrs[j] <- bioenv.corr$models[[j]]$est
+    }
+    best.corr[i] <- max(corrs)
+  }
+  
+  
+  
+  #Test of significance for bioenv
+  
+  
+  t <- length(best.corr[best.corr >= best.corr.actual])   #number of permuted best greater than actual best
+  
+  
+  Total <- nperm #total number of permutations
+  
+  
+  
+  p <- (t + 1)/(Total + 1) #upper limit of p value of permutations
+  
+  
+  #
+  #
+  #
+  #
+  #
+  #Plot histogram in ggplot with p value
+  #function creating the theme used in the plot
+  theme_Publication6.2 <- function(base_size=14, base_family="sans") {
+    
+    (theme_foundation(base_size=base_size, base_family=base_family)
+      + theme(plot.title = element_text(face = "italic",
+                                        size = rel(0.8), hjust = 0.5,
+                                        margin = margin (b = 0)),
+              text = element_text(),
+              panel.background = element_rect(colour = "black"),
+              plot.background = element_rect(colour = NA),
+              panel.border = element_rect(colour = NA),
+              axis.title = element_text(face = "bold",size = rel(0.8)),
+              axis.title.y = element_text(angle=90,vjust =3),
+              axis.title.x = element_text(vjust = -0.2),
+              axis.text.x = element_text(face="bold",size = rel(1)),
+              axis.text.y = element_text(face="bold",size = rel(1)),
+              axis.line = element_line(colour="black"),
+              axis.ticks = element_line(),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              legend.key = element_rect(colour = NA),
+              legend.position = "top",
+              legend.direction = "horizontal",
+              legend.key.size= unit(0.5, "cm"),
+              #legend.title = element_text(face="italic"),
+              legend.title = element_blank(),
+              legend.margin = margin(t=0, unit= "cm"),
+              legend.text=element_text(face="bold"),
+              plot.margin=unit(c(2,2,2,3),"mm"),
+              strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+              strip.text = element_text(face="bold")
+      )
+    )
+    
+    
+  }
+  
+  #plotting the histogram
+  
+  data.frame <- data.frame (corr = best.corr)
+  
+  #first line of plot to get the max count
+  best.plot <- ggplot(data.frame, aes(x = corr))+
+    geom_histogram(colour = "grey30", fill = "grey90")
+  
+  #extract max count using ggbuild to help annotate text
+  max.count <- max(ggplot_build(best.plot)$data[[1]]$count)
+  min.count <- min(ggplot_build(best.plot)$data[[1]]$count)
+  x.max <- max(ggplot_build(best.plot)$data[[1]]$x) #max x axis
+  
+  #x location of p-value annotation
+  if (x.max < best.corr.actual) {
+    xloc <- best.corr.actual*0.9
+  } else {
+    xloc <- x.max*0.9
+  }
+  
+  
+  
+  #continue plot with annotation
+  global.best.plot <- best.plot+
+    theme_Publication6.2() +
+    annotate("text", x = xloc, y = max.count, 
+             label = "p-val",
+             size = rel(2.5), fontface = "bold")+
+    annotate("text", x = xloc, y = max.count*0.9, 
+             label = bquote(bold(.(p))),
+             size = rel(2.5), fontface = "bold")+
+    annotate("text", x = best.corr.actual, y = max.count/3.1, 
+             label = bquote(bold(rho[s] *"="* .(best.corr.actual))),
+             size = rel(2.5), fontface = "bold")+
+    annotate("text", x = best.corr.actual, y = max.count/2.5, 
+             label = "BEST",
+             size = rel(2.5), fontface = "bold")+
+    annotate(geom = "segment", x = best.corr.actual,xend = best.corr.actual,
+             y = max.count/3.5, yend = min.count,
+             arrow = arrow(length = unit(2, "mm")))+
+    labs(x = bquote(bold(Matching~ coefficient~ rho[s])), 
+         y = bquote(bold(Frequency~ ( .(nperm)~ perms))))
+  
+  
+  
+  ggsave(
+    "BEST corr plot.svg",
+    plot = global.best.plot,
+    device = "svg",
+    scale = 1,
+    width = 13,
+    height = 7.43,
+    units = "cm"
+  )
+  
+  tiff("BEST corr plot.tiff",
+       width = 130, height = 74.3, 
+       units = "mm", res=300)
+  print(global.best.plot)
+  dev.off()
+  
+  
+  out <- list(
+    
+    BIOENV_results = bioenv.res, #BIOENV results. See bioenv output in the vegan package
+    permuted_best_corr = best.corr, #list of nperm best correlations from bioenv analysis on permuted data
+    permutation_trends = permutation_trends, #List of 2 containing: $chisq = chisq trend values
+                                              #                     $bray = Bray-Curtis trend values
+    t = t, #number of times where permuted BEST corr is >= actual BEST corr
+    p = p, #upper limit of p-value of global best test
+    global.best.plot = global.best.plot #plot of global best test
+    )
+  out
+  
+  
+}
